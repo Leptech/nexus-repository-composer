@@ -10,19 +10,22 @@
  * of Sonatype, Inc. Apache Maven is a trademark of the Apache Software Foundation. M2eclipse is a trademark of the
  * Eclipse Foundation. All other trademarks are the property of their respective owners.
  */
-Ext.define('NX.composer.util.ComposerRepositoryUrls', {
-  '@aggregate_priority': 90,
+package org.sonatype.nexus.repository.composer.internal;
 
-  singleton: true,
-  requires: [
-    'NX.coreui.util.RepositoryUrls',
-    'NX.util.Url'
-  ]
-}, function(self) {
-  NX.coreui.util.RepositoryUrls.addRepositoryUrlStrategy('composer', function(me, assetModel) {
-    var repositoryName = assetModel.get('repositoryName'), assetName = assetModel.get('name');
-    return NX.util.Url.asLink(
-        NX.util.Url.baseUrl + '/repository/' + encodeURIComponent(repositoryName) + '/' + encodeURI(assetName),
-        assetName);
-  });
-});
+import java.net.URI;
+
+import org.sonatype.nexus.testsuite.testsupport.FormatClientSupport;
+
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.impl.client.CloseableHttpClient;
+
+public class ComposerClient
+    extends FormatClientSupport
+{ public ComposerClient(
+    final CloseableHttpClient httpClient,
+    final HttpClientContext httpClientContext,
+    final URI repositoryBaseUri)
+  {
+    super(httpClient, httpClientContext, repositoryBaseUri);
+  }
+}

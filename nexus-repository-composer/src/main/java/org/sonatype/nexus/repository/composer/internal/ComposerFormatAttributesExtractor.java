@@ -24,12 +24,12 @@ import javax.inject.Singleton;
 
 import org.sonatype.goodies.common.ComponentSupport;
 import org.sonatype.nexus.common.collect.NestedAttributesMap;
-import org.sonatype.nexus.repository.storage.TempBlob;
+import org.sonatype.nexus.repository.view.payloads.TempBlob;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
-import static jline.internal.Preconditions.checkNotNull;
+import static java.util.Objects.requireNonNull;
 import static org.sonatype.nexus.repository.composer.internal.ComposerAttributes.*;
 
 /**
@@ -108,7 +108,7 @@ public class ComposerFormatAttributesExtractor
 
   @Inject
   public ComposerFormatAttributesExtractor(final ComposerJsonExtractor composerJsonExtractor) {
-    this.composerJsonExtractor = checkNotNull(composerJsonExtractor);
+    this.composerJsonExtractor = requireNonNull(composerJsonExtractor);
   }
 
   /**
