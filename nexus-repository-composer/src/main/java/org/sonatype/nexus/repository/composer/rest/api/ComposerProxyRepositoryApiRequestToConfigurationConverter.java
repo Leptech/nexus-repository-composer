@@ -5,6 +5,7 @@ import javax.inject.Named;
 
 import org.sonatype.nexus.common.collect.NestedAttributesMap;
 import org.sonatype.nexus.repository.composer.rest.api.model.ComposerProxyRepositoryApiRequest;
+import org.sonatype.nexus.repository.composer.rest.api.model.GitProxyAttributes;
 import org.sonatype.nexus.repository.composer.rest.api.model.GitSettingsAttributes;
 import org.sonatype.nexus.repository.config.Configuration;
 import org.sonatype.nexus.repository.rest.api.ProxyRepositoryApiRequestToConfigurationConverter;
@@ -39,6 +40,24 @@ public class ComposerProxyRepositoryApiRequestToConfigurationConverter<T extends
       gitSettingsConfiguration.set("remoteUrl", gitSettings.getRemoteUrl());
       gitSettingsConfiguration.set("username", gitSettings.getUsername());
       gitSettingsConfiguration.set("password", gitSettings.getPassword());
+      convertProxy(gitSettings, gitSettingsConfiguration);
+    }
+  }
+
+  private void convertProxy(
+      final GitSettingsAttributes gitSettings,
+      final NestedAttributesMap gitSettingsConfiguration) {
+    GitProxyAttributes proxy = gitSettings.getGitProxyAttributes();
+    if (nonNull(proxy)) {
+      NestedAttributesMap proxyConfiguration = gitSettingsConfiguration.child("proxy");
+      proxyConfiguration.set("httpHost", proxy.getHttpHost());
+      proxyConfiguration.set("httpPort", proxy.getHttpPort());
+      proxyConfiguration.set("httpUsername", proxy.getHttpUsername());
+      proxyConfiguration.set("httpPassword", proxy.getHttpPassword());
+      proxyConfiguration.set("httpsHost", proxy.getHttpsHost());
+      proxyConfiguration.set("httpsPort", proxy.getHttpsPort());
+      proxyConfiguration.set("httpsUsername", proxy.getHttpsUsername());
+      proxyConfiguration.set("httpsPassword", proxy.getHttpsPassword());
     }
   }
 

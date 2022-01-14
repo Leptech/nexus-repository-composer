@@ -27,7 +27,6 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.apache.commons.lang3.StringUtils;
 import org.sonatype.nexus.blobstore.api.Blob;
 import org.sonatype.nexus.blobstore.api.BlobRef;
 import org.sonatype.nexus.common.hash.HashAlgorithm;
@@ -43,6 +42,7 @@ import org.sonatype.nexus.repository.view.payloads.StringPayload;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.hash.Hashing;
+import org.apache.commons.lang3.StringUtils;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
@@ -51,7 +51,9 @@ import org.joda.time.format.DateTimeFormatter;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.singletonMap;
 import static org.sonatype.nexus.repository.composer.internal.ComposerPathUtils.buildZipballPath;
-import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.*;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_REFERENCE_FIELD_NAME;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_TYPE_FIELD_NAME;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_URL_FIELD_NAME;
 
 /**
  * Class encapsulating JSON processing for Composer-format repositories, including operations for parsing JSON indexes
@@ -183,7 +185,7 @@ public class ComposerJsonProcessor {
    * Rewrites the provider JSON so that source entries are removed and dist entries are pointed back to Nexus.
    */
   public Payload rewriteProviderJson(final Repository repository, final Payload payload) throws IOException {
-    GitUtils git = new GitUtils(repository.getConfiguration());
+    GitMirroringUtils gitMirroring = new GitMirroringUtils(repository.getConfiguration());
 
     Map<String, Object> json = parseJson(payload);
     if (json.get(PACKAGES_KEY) instanceof Map) {
@@ -203,10 +205,10 @@ public class ComposerJsonProcessor {
                     (String) distInfo.get(SHASUM_KEY), ZIP_TYPE));
           }
 
-          if (git.isEnabled() && distInfo == null && GIT_TYPE.equals(sourceInfo.get(TYPE_KEY))) {
-            String newUrl = git.buildNewUrl(packageName);
-            git.duplicateGit(packageName, (String) sourceInfo.get(URL_KEY), newUrl);
-            versionInfo.put(SOURCE_KEY, buildSourceInfo(newUrl, (String) sourceInfo.get(REFERENCE_KEY), GIT_TYPE));
+          if (gitMirroring.isEnabled() && distInfo == null && GIT_TYPE.equals(sourceInfo.get(TYPE_KEY))) {
+            String newUrl = gitMirroring.buildNewUrl(packageName);
+            gitMirroring.duplicate(packageName, (String) sourceInfo.get(URL_KEY), newUrl);
+            versionInfo.put(SOURCE_KEY, buildSourceInfo(GIT_TYPE, newUrl, (String) sourceInfo.get(REFERENCE_KEY)));
           }
         }
       }

@@ -12,10 +12,11 @@
  */
 package org.sonatype.nexus.repository.composer.internal;
 
-import org.junit.Test;
 import org.sonatype.goodies.testsupport.TestSupport;
 import org.sonatype.nexus.common.collect.NestedAttributesMap;
 import org.sonatype.nexus.repository.config.internal.ConfigurationData;
+
+import org.junit.Test;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -27,7 +28,7 @@ public class GitUtilsTest
 
   @Test
   public void gitMirroringDisabled() {
-    GitUtils git = new GitUtils(buildConfig(false));
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(false));
     assertFalse(git.isEnabled());
   }
 
@@ -36,7 +37,7 @@ public class GitUtilsTest
     String packageName = "jeremykenedy/laravel-roles";
     String url = "https://github.com/jeremykenedy/laravel-roles.git";
 
-    GitUtils git = new GitUtils(buildConfig(true));
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true));
 
     assertTrue(git.isEnabled());
 
@@ -48,8 +49,28 @@ public class GitUtilsTest
     // git.duplicateGit(packageName, url, newUrl);
   }
 
+  @Test
+  public void gitMirroringEnabledWithProxy() {
+    String packageName = "jeremykenedy/laravel-roles";
+    String url = "https://github.com/jeremykenedy/laravel-roles.git";
+
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true, true));
+
+    assertTrue(git.isEnabled());
+
+    String newUrl = git.buildNewUrl(packageName);
+
+    assertNotNull(newUrl);
+
+    // TODO
+    // git.duplicateGit(packageName, url, newUrl);
+  }
 
   private ConfigurationData buildConfig(boolean enabled) {
+    return buildConfig(enabled, false);
+  }
+
+  private ConfigurationData buildConfig(boolean enabled, boolean withProxy) {
     ConfigurationData configuration = new ConfigurationData();
     NestedAttributesMap gitSettingsConfiguration = configuration.attributes("gitSettings");
     gitSettingsConfiguration.set("enabled", enabled);
@@ -57,6 +78,17 @@ public class GitUtilsTest
       gitSettingsConfiguration.set("remoteUrl", "https://gitlab.com/myUsername/");
       gitSettingsConfiguration.set("username", "myUsername");
       gitSettingsConfiguration.set("password", "somePassword");
+      if (withProxy) {
+        NestedAttributesMap proxyConfiguration = gitSettingsConfiguration.child("proxy");
+        proxyConfiguration.set("httpHost", "localhost");
+        proxyConfiguration.set("httpPort", 8888);
+        proxyConfiguration.set("httpUsername", "1");
+        proxyConfiguration.set("httpPassword", "1");
+        proxyConfiguration.set("httpsHost", "localhost");
+        proxyConfiguration.set("httpsPort", 18888);
+        proxyConfiguration.set("httpsUsername", "2");
+        proxyConfiguration.set("httpsPassword", "2");
+      }
     }
     return configuration;
   }

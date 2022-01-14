@@ -44,7 +44,7 @@ Ext.define('NX.composer.view.repository.facet.GitSettingsFacet', {
         xtype: 'fieldset',
         itemId: 'gitSettingsFieldSet',
         cls: 'nx-form-section',
-        title: 'Git Settings',
+        title: 'Git Mirroring Settings',
         items: [
           {
             xtype: 'nx-optionalfieldset',
@@ -74,7 +74,90 @@ Ext.define('NX.composer.view.repository.facet.GitSettingsFacet', {
                 name: 'attributes.gitSettings.password',
                 fieldLabel: 'Password',
                 allowBlank: true
-              }
+              },
+              {
+                xtype: 'nx-optionalfieldset',
+                title: NX.I18n.get('System_HttpSettings_Proxy_Title'),
+                checkboxToggle: true,
+                checkboxName: 'attributes.gitSettings.proxy.httpEnabled',
+                collapsed: true,
+                items: [
+                  {
+                    xtype: 'nx-hostname',
+                    itemId: 'attributes_gitSettings_proxy_httpHost',
+                    name: 'attributes.gitSettings.proxy.httpHost',
+                    fieldLabel: NX.I18n.get('System_HttpSettings_ProxyHost_FieldLabel'),
+                    helpText: NX.I18n.get('System_HttpSettings_ProxyHost_HelpText'),
+                    allowBlank: false
+                  },
+                  {
+                    xtype: 'numberfield',
+                    itemId: 'attributes_gitSettings_proxy_httpPort',
+                    name: 'attributes.gitSettings.proxy.httpPort',
+                    fieldLabel: NX.I18n.get('System_HttpSettings_ProxyPort_FieldLabel'),
+                    minValue: 1,
+                    maxValue: 65535,
+                    allowDecimals: false,
+                    allowExponential: false,
+                    allowBlank: false
+                  },
+                  {
+                    xtype: 'textfield',
+                    itemId: 'attributes_gitSettings_proxy_httpUsername',
+                    name: 'attributes.gitSettings.proxy.httpUsername',
+                    fieldLabel: 'Username',
+                  },
+                  {
+                    xtype:'nx-password',
+                    itemId: 'attributes_gitSettings_proxy_httpPassword',
+                    name: 'attributes.gitSettings.proxy.httpPassword',
+                    fieldLabel: 'Password',
+                    allowBlank: true
+                  }
+                ]
+              },
+              {
+                xtype: 'nx-optionalfieldset',
+                title: NX.I18n.get('System_HttpSettings_HttpsProxy_Title'),
+                itemId: 'httpsProxy',
+                checkboxToggle: true,
+                checkboxName: 'attributes.gitSettings.proxy.httpsEnabled',
+                collapsed: true,
+                items: [
+                  {
+                    xtype: 'nx-hostname',
+                    itemId: 'attributes_gitSettings_proxy_httpsHost',
+                    name: 'attributes.gitSettings.proxy.httpsHost',
+                    fieldLabel: NX.I18n.get('System_HttpSettings_HttpsProxyHost_FieldLabel'),
+                    helpText: NX.I18n.get('System_HttpSettings_HttpsProxyHost_HelpText'),
+                    allowBlank: false
+                  },
+                  {
+                    xtype: 'numberfield',
+                    itemId: 'attributes_gitSettings_proxy_httpsPort',
+                    name: 'attributes.gitSettings.proxy.httpsPort',
+                    fieldLabel: NX.I18n.get('System_HttpSettings_HttpsProxyPort_FieldLabel'),
+                    minValue: 1,
+                    maxValue: 65535,
+                    allowDecimals: false,
+                    allowExponential: false,
+                    allowBlank: false
+                  },
+                  {
+                    xtype: 'textfield',
+                    itemId: 'attributes_gitSettings_proxy_httpsUsername',
+                    name: 'attributes.gitSettings.proxy.httpsUsername',
+                    fieldLabel: 'Username',
+                  },
+                  {
+                    xtype:'nx-password',
+                    itemId: 'attributes_gitSettings_proxy_httpsPassword',
+                    name: 'attributes.gitSettings.proxy.httpsPassword',
+                    fieldLabel: 'Password',
+                    allowBlank: true
+                  }
+                ]
+              },
             ]
           }
         ]
