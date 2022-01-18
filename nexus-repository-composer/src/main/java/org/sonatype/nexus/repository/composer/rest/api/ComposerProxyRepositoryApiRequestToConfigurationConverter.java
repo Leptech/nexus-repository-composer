@@ -58,6 +58,7 @@ public class ComposerProxyRepositoryApiRequestToConfigurationConverter<T extends
       proxyConfiguration.set("httpsPort", proxy.getHttpsPort());
       proxyConfiguration.set("httpsUsername", proxy.getHttpsUsername());
       proxyConfiguration.set("httpsPassword", proxy.getHttpsPassword());
+      proxyConfiguration.set("nonProxyHosts", proxy.getNonProxyHosts());
     }
   }
 

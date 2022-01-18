@@ -1,5 +1,9 @@
 package org.sonatype.nexus.repository.composer.rest.api.model;
 
+import java.util.List;
+
+import org.sonatype.nexus.httpclient.config.NonProxyHosts;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.annotations.ApiModelProperty;
@@ -33,6 +37,10 @@ public class GitProxyAttributes {
   @ApiModelProperty(access = "writeOnly")
   protected final String httpsPassword;
 
+  @ApiModelProperty
+  @NonProxyHosts
+  protected final List<String> nonProxyHosts;
+
   @JsonCreator
   public GitProxyAttributes(
       @JsonProperty("httpHost") final String httpHost,
@@ -42,7 +50,8 @@ public class GitProxyAttributes {
       @JsonProperty("httpsHost") final String httpsHost,
       @JsonProperty("httpsPort") final Integer httpsPort,
       @JsonProperty("httpsUsername") final String httpsUsername,
-      @JsonProperty(value = "httpsPassword", access = JsonProperty.Access.WRITE_ONLY) final String httpsPassword
+      @JsonProperty(value = "httpsPassword", access = JsonProperty.Access.WRITE_ONLY) final String httpsPassword,
+      @JsonProperty("nonProxyHosts") final List<String> nonProxyHosts
   ) {
     this.httpHost = httpHost;
     this.httpPort = httpPort;
@@ -52,6 +61,7 @@ public class GitProxyAttributes {
     this.httpsPort = httpsPort;
     this.httpsUsername = httpsUsername;
     this.httpsPassword = httpsPassword;
+    this.nonProxyHosts = nonProxyHosts;
   }
 
   public String getHttpHost() {
@@ -84,5 +94,9 @@ public class GitProxyAttributes {
 
   public String getHttpsPassword() {
     return httpsPassword;
+  }
+
+  public List<String> getNonProxyHosts() {
+    return nonProxyHosts;
   }
 }

@@ -14,13 +14,21 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 import org.sonatype.goodies.common.Loggers;
 import org.sonatype.nexus.common.collect.NestedAttributesMap;
+import org.sonatype.nexus.common.text.Strings2;
 import org.sonatype.nexus.repository.config.Configuration;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.reflect.TypeToken;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
@@ -29,11 +37,10 @@ import org.slf4j.Logger;
 
 public class GitMirroringUtils {
   protected final Logger log = Preconditions.checkNotNull(Loggers.getLogger(this));
-
+  private Pattern nonProxyHostPattern = null;
   private Boolean enabled = false;
   private String remoteUrl = null;
   private UsernamePasswordCredentialsProvider cred = null;
-
   private List<String> processedPackages = null;
 
   public GitMirroringUtils(Configuration configuration) {
@@ -57,6 +64,8 @@ public class GitMirroringUtils {
               toInt(proxy.get("httpsPort", Number.class)),
               proxy.get("httpsUsername", String.class),
               proxy.get("httpsPassword", String.class));
+          this.nonProxyHostPattern = buildNonProxyHostPattern(proxy.get("nonProxyHosts", new TypeToken<List<String>>() {
+          }));
         }
       }
     }
@@ -92,13 +101,15 @@ public class GitMirroringUtils {
       @Override
       public List<Proxy> select(URI uri) {
         // Filter the URIs to be proxied
-        if (uri.toString().startsWith("https")
-            && null != httpsHost && null != httpsPort) {
-          return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpsHost, httpsPort)));
-        }
-        if (uri.toString().startsWith("http")
-            && null != httpHost && null != httpPort) {
-          return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpHost, httpPort)));
+        if (!noProxyFor(uri.getHost())) {
+          if (uri.toString().startsWith("https")
+              && null != httpsHost && null != httpsPort) {
+            return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpsHost, httpsPort)));
+          }
+          if (uri.toString().startsWith("http")
+              && null != httpHost && null != httpPort) {
+            return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpHost, httpPort)));
+          }
         }
         // revert to the default behaviour
         return delegate == null ? Arrays.asList(Proxy.NO_PROXY) : delegate.select(uri);
@@ -189,6 +200,7 @@ public class GitMirroringUtils {
     return Git.cloneRepository()
         .setURI(url)
         .setDirectory(localPath)
+        .setBare(true)
         .call();
   }
 
@@ -213,4 +225,29 @@ public class GitMirroringUtils {
     }
   }
 
+
+  private Pattern buildNonProxyHostPattern(final List<String> nonProxyHosts) {
+    if (null == nonProxyHosts) {
+      return null;
+    }
+    LinkedHashSet<String> patterns = new LinkedHashSet<>(nonProxyHosts);
+    String nonProxyPatternString = Joiner.on("|").join(patterns.stream().map(
+        input -> "(" + input.toLowerCase(Locale.US).replaceAll("\\.", "\\\\.")
+            .replaceAll("\\*", ".*?").replaceAll("\\[", "\\\\[")
+            .replaceAll("\\]", "\\\\]") + ")"
+    ).collect(Collectors.toList()));
+    Pattern nonProxyPattern = null;
+    if (!Strings2.isBlank(nonProxyPatternString)) {
+      try {
+        nonProxyPattern = Pattern.compile(nonProxyPatternString, Pattern.CASE_INSENSITIVE);
+      } catch (PatternSyntaxException e) {
+        log.warn("Invalid non-proxy host regex: {}, using defaults", nonProxyPatternString, e);
+      }
+    }
+    return nonProxyPattern;
+  }
+
+  private boolean noProxyFor(final String hostName) {
+    return nonProxyHostPattern != null && nonProxyHostPattern.matcher(hostName).matches();
+  }
 }

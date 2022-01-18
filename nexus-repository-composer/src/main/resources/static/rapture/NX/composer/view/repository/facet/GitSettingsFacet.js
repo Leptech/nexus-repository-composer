@@ -158,6 +158,15 @@ Ext.define('NX.composer.view.repository.facet.GitSettingsFacet', {
                   }
                 ]
               },
+              {
+                xtype: 'nx-valueset',
+                name: 'attributes.gitSettings.proxy.nonProxyHosts',
+                itemId: 'attributes_gitSettings_proxy_nonProxyHosts',
+                fieldLabel: NX.I18n.get('System_HttpSettings_ExcludeHosts_FieldLabel'),
+                helpText: NX.I18n.get('System_HttpSettings_ExcludeHosts_HelpText'),
+                sorted: true,
+                allowBlank: true
+              }
             ]
           }
         ]

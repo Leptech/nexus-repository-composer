@@ -12,7 +12,11 @@
  */
 package org.sonatype.nexus.repository.composer.internal;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+
 import org.sonatype.goodies.testsupport.TestSupport;
+import org.sonatype.nexus.common.collect.DetachingList;
 import org.sonatype.nexus.common.collect.NestedAttributesMap;
 import org.sonatype.nexus.repository.config.internal.ConfigurationData;
 
@@ -46,7 +50,7 @@ public class GitUtilsTest
     assertNotNull(newUrl);
 
     // TODO
-    // git.duplicateGit(packageName, url, newUrl);
+    // git.duplicate(packageName, url, newUrl);
   }
 
   @Test
@@ -54,7 +58,7 @@ public class GitUtilsTest
     String packageName = "jeremykenedy/laravel-roles";
     String url = "https://github.com/jeremykenedy/laravel-roles.git";
 
-    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true, true));
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true, true, null));
 
     assertTrue(git.isEnabled());
 
@@ -63,21 +67,41 @@ public class GitUtilsTest
     assertNotNull(newUrl);
 
     // TODO
-    // git.duplicateGit(packageName, url, newUrl);
+//     git.duplicate(packageName, url, newUrl);
+  }
+
+  @Test
+  public void gitMirroringEnabledWithNonHostProxyDet() {
+    String packageName = "jeremykenedy/laravel-roles";
+    String url = "https://github.com/jeremykenedy/laravel-roles.git";
+
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true, true, "DetachingList"));
+
+    assertTrue(git.isEnabled());
+  }
+
+  @Test
+  public void gitMirroringEnabledWithNonHostProxyArr() {
+    String packageName = "jeremykenedy/laravel-roles";
+    String url = "https://github.com/jeremykenedy/laravel-roles.git";
+
+    GitMirroringUtils git = new GitMirroringUtils(buildConfig(true, true, "ArrayList"));
+
+    assertTrue(git.isEnabled());
   }
 
   private ConfigurationData buildConfig(boolean enabled) {
-    return buildConfig(enabled, false);
+    return buildConfig(enabled, false, null);
   }
 
-  private ConfigurationData buildConfig(boolean enabled, boolean withProxy) {
+  private ConfigurationData buildConfig(boolean enabled, boolean withProxy, String withNonHost) {
     ConfigurationData configuration = new ConfigurationData();
     NestedAttributesMap gitSettingsConfiguration = configuration.attributes("gitSettings");
     gitSettingsConfiguration.set("enabled", enabled);
     if (enabled) {
-      gitSettingsConfiguration.set("remoteUrl", "https://gitlab.com/myUsername/");
-      gitSettingsConfiguration.set("username", "myUsername");
-      gitSettingsConfiguration.set("password", "somePassword");
+      gitSettingsConfiguration.set("remoteUrl", "https://gitlab.com/username/");
+      gitSettingsConfiguration.set("username", "username");
+      gitSettingsConfiguration.set("password", "password");
       if (withProxy) {
         NestedAttributesMap proxyConfiguration = gitSettingsConfiguration.child("proxy");
         proxyConfiguration.set("httpHost", "localhost");
@@ -88,6 +112,11 @@ public class GitUtilsTest
         proxyConfiguration.set("httpsPort", 18888);
         proxyConfiguration.set("httpsUsername", "2");
         proxyConfiguration.set("httpsPassword", "2");
+        if ("DetachingList".equals(withNonHost)) {
+          proxyConfiguration.set("nonProxyHosts", new DetachingList<String>(Arrays.asList("*.mycompany", "hello.com"), a -> a));
+        } else if ("ArrayList".equals(withNonHost)) {
+          proxyConfiguration.set("nonProxyHosts", new ArrayList<String>(Arrays.asList("*.mycompany", "hello.com")));
+        }
       }
     }
     return configuration;
