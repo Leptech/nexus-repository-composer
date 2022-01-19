@@ -2,6 +2,7 @@ package org.sonatype.nexus.repository.composer.internal;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.Authenticator;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
@@ -9,6 +10,8 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,32 +30,48 @@ import org.sonatype.nexus.common.text.Strings2;
 import org.sonatype.nexus.repository.config.Configuration;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.reflect.TypeToken;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.slf4j.Logger;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
+
 
 public class GitMirroringUtils {
-  protected final Logger log = Preconditions.checkNotNull(Loggers.getLogger(this));
-  private Pattern nonProxyHostPattern = null;
+  protected final Logger log = checkNotNull(Loggers.getLogger(this));
+
   private Boolean enabled = false;
   private String remoteUrl = null;
+  private String groupName = null;
   private UsernamePasswordCredentialsProvider cred = null;
+  private Pattern nonProxyHostPattern = null;
+  private String apiToken = null;
+
   private List<String> processedPackages = null;
 
   public GitMirroringUtils(Configuration configuration) {
-    NestedAttributesMap gitSettings = null != configuration ? configuration.attributes("gitSettings") : null;
+    NestedAttributesMap gitSettings = isNull(configuration) ? null : configuration.attributes("gitSettings");
     if (null != gitSettings) {
       Boolean enabled = gitSettings.get("enabled", Boolean.class);
       if (null != enabled && enabled) {
         this.enabled = true;
         this.remoteUrl = gitSettings.get("remoteUrl", String.class);
+        this.remoteUrl = isNull(this.remoteUrl) ? null : this.remoteUrl.replaceAll("/$", "");
+        this.groupName = gitSettings.get("groupName", String.class);
         this.cred = new UsernamePasswordCredentialsProvider(
             gitSettings.get("username", String.class),
             nonNullString(gitSettings.get("password", String.class)));
+        this.apiToken = gitSettings.get("apiToken", String.class);
         initProcessedPackages();
         if (gitSettings.contains("proxy")) {
           NestedAttributesMap proxy = gitSettings.child("proxy");
@@ -72,11 +91,15 @@ public class GitMirroringUtils {
   }
 
   protected static Integer toInt(final Number num) {
-    return num == null ? null : num.intValue();
+    return isNull(num) ? null : num.intValue();
   }
 
   protected static String nonNullString(final String str) {
-    return str == null ? "" : str;
+    return isNull(str) ? "" : str;
+  }
+
+  protected static String encode(final String str) throws UnsupportedEncodingException {
+    return URLEncoder.encode(str, StandardCharsets.UTF_8.toString());
   }
 
   private void initProcessedPackages() {
@@ -103,27 +126,27 @@ public class GitMirroringUtils {
         // Filter the URIs to be proxied
         if (!noProxyFor(uri.getHost())) {
           if (uri.toString().startsWith("https")
-              && null != httpsHost && null != httpsPort) {
+              && nonNull(httpsHost) && nonNull(httpsPort)) {
             return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpsHost, httpsPort)));
           }
           if (uri.toString().startsWith("http")
-              && null != httpHost && null != httpPort) {
+              && nonNull(httpHost) && nonNull(httpPort)) {
             return Arrays.asList(new Proxy(Proxy.Type.HTTP, InetSocketAddress.createUnresolved(httpHost, httpPort)));
           }
         }
         // revert to the default behaviour
-        return delegate == null ? Arrays.asList(Proxy.NO_PROXY) : delegate.select(uri);
+        return isNull(delegate) ? Arrays.asList(Proxy.NO_PROXY) : delegate.select(uri);
       }
 
       @Override
       public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
-        if (uri == null || sa == null || ioe == null) {
+        if (isNull(uri) || isNull(sa) || isNull(ioe)) {
           throw new IllegalArgumentException("Arguments can't be null.");
         }
       }
     });
-    if ((null != httpUsername && null != httpPassword)
-        || (null != httpsUsername && null != httpsPassword)) {
+    if ((nonNull(httpUsername) && nonNull(httpPassword))
+        || (nonNull(httpsUsername) && nonNull(httpsPassword))) {
 
       Authenticator.setDefault(new Authenticator() {
 
@@ -131,10 +154,10 @@ public class GitMirroringUtils {
         public PasswordAuthentication getPasswordAuthentication() {
           String username = "";
           String password = "";
-          if ("https".equals(getRequestingProtocol()) && null != httpsUsername && null != httpsPassword) {
+          if ("https".equals(getRequestingProtocol()) && nonNull(httpsUsername) && nonNull(httpsPassword)) {
             username = httpsUsername;
             password = httpsPassword;
-          } else if ("http".equals(getRequestingProtocol()) && null != httpUsername && null != httpPassword) {
+          } else if ("http".equals(getRequestingProtocol()) && nonNull(httpUsername) && nonNull(httpPassword)) {
             username = httpUsername;
             password = httpPassword;
           }
@@ -142,12 +165,12 @@ public class GitMirroringUtils {
         }
       });
     }
-    if (null != httpUsername && null != httpPassword) {
+    if (nonNull(httpUsername) && nonNull(httpPassword)) {
       System.setProperty("http.proxyUser", httpUsername);
       System.setProperty("http.proxyPassword", httpPassword);
       System.setProperty("jdk.http.auth.tunneling.disabledSchemes", "");
     }
-    if (null != httpsUsername && null != httpsPassword) {
+    if (nonNull(httpsUsername) && nonNull(httpsPassword)) {
       System.setProperty("https.proxyUser", httpsUsername);
       System.setProperty("https.proxyPassword", httpsPassword);
       System.setProperty("jdk.http.auth.tunneling.disabledSchemes", "");
@@ -159,7 +182,7 @@ public class GitMirroringUtils {
   }
 
   public String buildNewUrl(final String packageName) {
-    return remoteUrl + packageName.replace('/', '_') + ".git";
+    return remoteUrl + "/" + groupName + "/" + packageName.replace('/', '_') + ".git";
   }
 
   public void duplicate(final String packageName, final String url, final String newUrl) {
@@ -169,11 +192,15 @@ public class GitMirroringUtils {
     Git git = null;
     File localPath = null;
     try {
-      localPath = this.getTemporaryDirectory();
-      git = this.cloneRepo(url, localPath);
+      localPath = getTemporaryDirectory();
+      git = cloneRepo(url, localPath);
       log.info("Package {} cloned from {}", packageName, url);
-      this.forcePush(git, newUrl);
+      forcePush(git, newUrl);
       log.info("Package {} mirrored to {}", packageName, newUrl);
+      if (nonNull(apiToken)) {
+        makeRepositoryPublic(packageName);
+        log.info("Repo is now public {}", newUrl);
+      }
 
     } catch (IOException | GitAPIException e) {
       log.error("Unable to clone or push git package {}, from {}, skipping", packageName, url);
@@ -182,7 +209,7 @@ public class GitMirroringUtils {
       try {
         this.cleanup(git, localPath);
       } catch (IOException e) {
-        log.error("Unable to cleanup for package {}", packageName);
+        log.error("Unable to cleanup for package {}, skipping", packageName);
       }
     }
 
@@ -196,7 +223,7 @@ public class GitMirroringUtils {
   }
 
   private Git cloneRepo(final String url, File localPath) throws GitAPIException {
-    // git clone [url]
+    // git clone [url] --bare
     return Git.cloneRepository()
         .setURI(url)
         .setDirectory(localPath)
@@ -214,10 +241,10 @@ public class GitMirroringUtils {
   }
 
   private void cleanup(Git git, File localPath) throws IOException {
-    if (git != null) {
+    if (nonNull(git)) {
       git.close();
     }
-    if (localPath != null) {
+    if (nonNull(localPath)) {
       Files.walk(localPath.toPath())
           .sorted(Comparator.reverseOrder())
           .map(Path::toFile)
@@ -225,6 +252,28 @@ public class GitMirroringUtils {
     }
   }
 
+  private void makeRepositoryPublic(String packageName) {
+    try {
+      CloseableHttpClient httpclient = HttpClients.createDefault();
+      HttpPut httpPut = new HttpPut(buildApiUrl(packageName));
+      httpPut.setHeader("PRIVATE-TOKEN", apiToken);
+      httpPut.setEntity(new UrlEncodedFormEntity(Arrays.asList(new BasicNameValuePair("visibility", "public"))));
+
+      try (CloseableHttpResponse response = httpclient.execute(httpPut)) {
+        int statusCode = response.getStatusLine().getStatusCode();
+        if (statusCode != 200) {
+          log.warn("makeRepositoryPublic Response code : {}", statusCode);
+        }
+      }
+    } catch (IOException e) {
+      log.error("makeRepositoryPublic : {}", e.getMessage());
+    }
+  }
+
+  private String buildApiUrl(final String packageName) throws UnsupportedEncodingException {
+    String projectId = encode(this.groupName + "/" + packageName.replace('/', '_'));
+    return remoteUrl + "/api/v4/projects/" + projectId;
+  }
 
   private Pattern buildNonProxyHostPattern(final List<String> nonProxyHosts) {
     if (null == nonProxyHosts) {
@@ -248,6 +297,6 @@ public class GitMirroringUtils {
   }
 
   private boolean noProxyFor(final String hostName) {
-    return nonProxyHostPattern != null && nonProxyHostPattern.matcher(hostName).matches();
+    return nonNull(nonProxyHostPattern) && nonProxyHostPattern.matcher(hostName).matches();
   }
 }

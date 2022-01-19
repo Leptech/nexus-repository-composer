@@ -58,7 +58,15 @@ Ext.define('NX.composer.view.repository.facet.GitSettingsFacet', {
                 itemId: 'attributes_gitSettings_remoteUrl',
                 name: 'attributes.gitSettings.remoteUrl',
                 fieldLabel: 'Remote Url',
-                emptyText: 'https://gitlab.com/username/',
+                emptyText: 'https://gitlab.com/',
+                allowBlank: false,
+              },
+              {
+                xtype: 'textfield',
+                itemId: 'attributes_gitSettings_groupName',
+                name: 'attributes.gitSettings.groupName',
+                fieldLabel: 'Group Name',
+                emptyText: 'my-public-group',
                 allowBlank: false,
               },
               {
@@ -74,6 +82,12 @@ Ext.define('NX.composer.view.repository.facet.GitSettingsFacet', {
                 name: 'attributes.gitSettings.password',
                 fieldLabel: 'Password',
                 allowBlank: true
+              },
+              {
+                xtype: 'textfield',
+                itemId: 'attributes_gitSettings_apiToken',
+                name: 'attributes.gitSettings.apiToken',
+                fieldLabel: 'API Token',
               },
               {
                 xtype: 'nx-optionalfieldset',

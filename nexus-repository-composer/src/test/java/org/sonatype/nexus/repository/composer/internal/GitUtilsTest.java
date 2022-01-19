@@ -99,7 +99,8 @@ public class GitUtilsTest
     NestedAttributesMap gitSettingsConfiguration = configuration.attributes("gitSettings");
     gitSettingsConfiguration.set("enabled", enabled);
     if (enabled) {
-      gitSettingsConfiguration.set("remoteUrl", "https://gitlab.com/username/");
+      gitSettingsConfiguration.set("remoteUrl", "https://gitlab.com/");
+      gitSettingsConfiguration.set("groupName", "my-group-name");
       gitSettingsConfiguration.set("username", "username");
       gitSettingsConfiguration.set("password", "password");
       if (withProxy) {
