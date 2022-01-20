@@ -50,6 +50,8 @@ import org.joda.time.format.DateTimeFormatter;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.singletonMap;
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 import static org.sonatype.nexus.repository.composer.internal.ComposerPathUtils.buildZipballPath;
 import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_REFERENCE_FIELD_NAME;
 import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_TYPE_FIELD_NAME;
@@ -205,7 +207,7 @@ public class ComposerJsonProcessor {
                     (String) distInfo.get(SHASUM_KEY), ZIP_TYPE));
           }
 
-          if (gitMirroring.isEnabled() && distInfo == null && GIT_TYPE.equals(sourceInfo.get(TYPE_KEY))) {
+          if (gitMirroring.isEnabled() && isNull(distInfo) && nonNull(sourceInfo) && GIT_TYPE.equals(sourceInfo.get(TYPE_KEY))) {
             String newUrl = gitMirroring.buildNewUrl(packageName);
             gitMirroring.duplicate(packageName, (String) sourceInfo.get(URL_KEY), newUrl);
             versionInfo.put(SOURCE_KEY, buildSourceInfo(GIT_TYPE, newUrl, (String) sourceInfo.get(REFERENCE_KEY)));
