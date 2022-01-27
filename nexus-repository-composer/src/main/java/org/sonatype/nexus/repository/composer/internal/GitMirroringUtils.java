@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -189,6 +190,13 @@ public class GitMirroringUtils {
     if (isProcessedOtherwiseAddIt(packageName)) {
       return;
     }
+    Executors.newSingleThreadExecutor().submit(() -> {
+      duplicateProcess(packageName, url, newUrl);
+    });
+  }
+
+  private void duplicateProcess(final String packageName, final String url, final String newUrl) {
+
     Git git = null;
     File localPath = null;
     try {
