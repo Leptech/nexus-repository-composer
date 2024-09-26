@@ -15,10 +15,8 @@ package org.sonatype.nexus.repository.composer.internal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +27,6 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import org.apache.commons.lang3.StringUtils;
 import org.sonatype.nexus.blobstore.api.Blob;
 import org.sonatype.nexus.blobstore.api.BlobRef;
 import org.sonatype.nexus.common.hash.HashAlgorithm;
@@ -45,6 +42,7 @@ import org.sonatype.nexus.repository.view.payloads.StringPayload;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.hash.Hashing;
+import org.apache.commons.lang3.StringUtils;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
@@ -52,8 +50,12 @@ import org.joda.time.format.DateTimeFormatter;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.singletonMap;
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 import static org.sonatype.nexus.repository.composer.internal.ComposerPathUtils.buildZipballPath;
-import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.*;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_REFERENCE_FIELD_NAME;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_TYPE_FIELD_NAME;
+import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupport.SOURCE_URL_FIELD_NAME;
 
 /**
  * Class encapsulating JSON processing for Composer-format repositories, including operations for parsing JSON indexes
@@ -61,8 +63,7 @@ import static org.sonatype.nexus.repository.composer.internal.ComposerRecipeSupp
  */
 @Named
 @Singleton
-public class ComposerJsonProcessor
-{
+public class ComposerJsonProcessor {
   private static final String PACKAGE_JSON_PATH = "/p/%package%.json";
 
   private static final String VENDOR_AND_PROJECT = "%s/%s";
@@ -96,8 +97,6 @@ public class ComposerJsonProcessor
   private static final String PROVIDERS_KEY = "providers";
 
   private static final String PACKAGES_KEY = "packages";
-
-  private static final String PACKAGE_NAMES_KEY = "packageNames";
 
   private static final String PROVIDE_KEY = "provide";
 
@@ -137,6 +136,8 @@ public class ComposerJsonProcessor
 
   private static final String ZIP_TYPE = "zip";
 
+  private static final String GIT_TYPE = "git";
+
   private static final ObjectMapper mapper = new ObjectMapper();
 
   private static final DateTimeFormatter timeFormatter = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ssZZ");
@@ -149,14 +150,15 @@ public class ComposerJsonProcessor
   }
 
   /**
-   * Generates a packages.json file (inclusive of all projects) based on the list.json provided as a payload. Expected
-   * usage is to "go remote" on the current repository to fetch a list.json copy, then pass it to this method to build
-   * the packages.json for the client to use.
+   * Generates a packages.json file (inclusive of all projects) based on the packages-with-hashes.json provided as a
+   * payload. Expected usage is to "go remote" on the current repository to force it to fetch and merge all providers
+   * in the provider-includes upstream, then pass it to this method to build the packages.json for the client to use.
    */
-  public Content generatePackagesFromList(final Repository repository, final Payload payload) throws IOException {
+  public Content generatePackagesFromHashes(final Repository repository, final Payload payload)
+      throws IOException {
     // TODO: Parse using JSON tokens rather than loading all this into memory, it "should" work but I'd be careful.
-    Map<String, Object> listJson = parseJson(payload);
-    return buildPackagesJson(repository, new LinkedHashSet<>((Collection<String>) listJson.get(PACKAGE_NAMES_KEY)));
+    ComposerPackagesJson packagesJson = parseJson(payload, ComposerPackagesJson.class);
+    return buildPackagesJson(repository, packagesJson.getProviders().keySet());
   }
 
   /**
@@ -165,8 +167,7 @@ public class ComposerJsonProcessor
    * packages.json for the client to use.
    */
   public Content generatePackagesFromComponents(final Repository repository, final Iterable<Component> components)
-      throws IOException
-  {
+      throws IOException {
     return buildPackagesJson(repository, StreamSupport.stream(components.spliterator(), false)
         .map(component -> component.group() + "/" + component.name()).collect(Collectors.toSet()));
   }
@@ -175,10 +176,10 @@ public class ComposerJsonProcessor
    * Builds a packages.json file as a {@code Content} instance containing the actual JSON for the given providers.
    */
   private Content buildPackagesJson(final Repository repository, final Set<String> names) throws IOException {
-    Map<String, Object> packagesJson = new LinkedHashMap<>();
-    packagesJson.put(PROVIDERS_URL_KEY, repository.getUrl() + PACKAGE_JSON_PATH);
-    packagesJson.put(PROVIDERS_KEY, names.stream()
-        .collect(Collectors.toMap((each) -> each, (each) -> singletonMap(SHA256_KEY, null))));
+    ComposerPackagesJson packagesJson = new ComposerPackagesJson();
+    packagesJson.setProvidersUrl(repository.getUrl() + PACKAGE_JSON_PATH);
+    packagesJson.setProviders(names.stream()
+        .collect(Collectors.toMap((each) -> each, (each) -> new ComposerDigestEntry())));
     return new Content(new StringPayload(mapper.writeValueAsString(packagesJson), ContentTypes.APPLICATION_JSON));
   }
 
@@ -186,6 +187,8 @@ public class ComposerJsonProcessor
    * Rewrites the provider JSON so that source entries are removed and dist entries are pointed back to Nexus.
    */
   public Payload rewriteProviderJson(final Repository repository, final Payload payload) throws IOException {
+    GitMirroringUtils gitMirroring = new GitMirroringUtils(repository.getConfiguration());
+
     Map<String, Object> json = parseJson(payload);
     if (json.get(PACKAGES_KEY) instanceof Map) {
       Map<String, Object> packagesMap = (Map<String, Object>) json.get(PACKAGES_KEY);
@@ -194,6 +197,7 @@ public class ComposerJsonProcessor
         for (String packageVersion : packageVersions.keySet()) {
           // TODO: Make this more robust, right now it makes a lot of assumptions and doesn't deal with bad things well
           Map<String, Object> versionInfo = (Map<String, Object>) packageVersions.get(packageVersion);
+          Map<String, Object> sourceInfo = (Map<String, Object>) versionInfo.get(SOURCE_KEY);
           versionInfo.remove(SOURCE_KEY); // TODO: For now don't allow sources, probably should make this configurable?
 
           Map<String, Object> distInfo = (Map<String, Object>) versionInfo.get(DIST_KEY);
@@ -201,6 +205,12 @@ public class ComposerJsonProcessor
             versionInfo.put(DIST_KEY,
                 buildDistInfo(repository, packageName, packageVersion, (String) distInfo.get(REFERENCE_KEY),
                     (String) distInfo.get(SHASUM_KEY), ZIP_TYPE));
+          }
+
+          if (gitMirroring.isEnabled() && isNull(distInfo) && nonNull(sourceInfo) && GIT_TYPE.equals(sourceInfo.get(TYPE_KEY))) {
+            String newUrl = gitMirroring.buildNewUrl(packageName);
+            gitMirroring.duplicate(packageName, (String) sourceInfo.get(URL_KEY), newUrl);
+            versionInfo.put(SOURCE_KEY, buildSourceInfo(GIT_TYPE, newUrl, (String) sourceInfo.get(REFERENCE_KEY)));
           }
         }
       }
@@ -220,8 +230,7 @@ public class ComposerJsonProcessor
    */
   public Content buildProviderJson(final Repository repository,
                                    final StorageTx storageTx,
-                                   final Iterable<Component> components) throws IOException
-  {
+                                   final Iterable<Component> components) throws IOException {
     Map<String, Map<String, Object>> packages = new LinkedHashMap<>();
     for (Component component : components) {
       Asset asset = storageTx.firstAsset(component);
@@ -278,8 +287,7 @@ public class ComposerJsonProcessor
    * need to download artifacts.
    */
   public Content mergeProviderJson(final Repository repository, final List<Payload> payloads, final DateTime now)
-      throws IOException
-  {
+      throws IOException {
     String currentTime = now.withZone(DateTimeZone.UTC).toString(timeFormatter);
 
     // TODO: Make this more robust, right now it makes a lot of assumptions and doesn't deal with bad things well,
@@ -332,8 +340,7 @@ public class ComposerJsonProcessor
                                                final String type,
                                                final String time,
                                                final Map<String, Object> versionInfo,
-                                               final Map<String, Object> sourceInfo)
-  {
+                                               final Map<String, Object> sourceInfo) {
     Map<String, Object> newPackageInfo = new LinkedHashMap<>();
     newPackageInfo.put(NAME_KEY, packageName);
     newPackageInfo.put(VERSION_KEY, packageVersion);
@@ -420,9 +427,8 @@ public class ComposerJsonProcessor
                                             final String packageVersion,
                                             final String reference,
                                             final String shasum,
-                                            final String type)
-  {
-    String packageNameParts[] = packageName.split("/");
+                                            final String type) {
+    String[] packageNameParts = packageName.split("/");
     String packageVendor = packageNameParts[0];
     String packageProject = packageNameParts[1];
     Map<String, Object> newDistInfo = new LinkedHashMap<>();
@@ -434,12 +440,21 @@ public class ComposerJsonProcessor
     return newDistInfo;
   }
 
+  private Map<String, Object> buildSourceInfo(final String type,
+                                              final String url,
+                                              final String reference) {
+    Map<String, Object> newSourceInfo = new LinkedHashMap<>();
+    newSourceInfo.put(TYPE_KEY, type);
+    newSourceInfo.put(URL_KEY, url);
+    newSourceInfo.put(REFERENCE_KEY, reference);
+    return newSourceInfo;
+  }
+
   /**
    * Obtains the dist URL for a particular vendor/project and version within a provider JSON payload.
    */
   public String getDistUrl(final String vendor, final String project, final String version, final Payload payload)
-      throws IOException
-  {
+      throws IOException {
     String vendorAndProject = String.format(VENDOR_AND_PROJECT, vendor, project);
     Map<String, Object> json = parseJson(payload);
     Map<String, Object> packagesMap = (Map<String, Object>) json.get(PACKAGES_KEY);
@@ -451,8 +466,63 @@ public class ComposerJsonProcessor
 
   private Map<String, Object> parseJson(final Payload payload) throws IOException {
     try (InputStream in = payload.openInputStream()) {
-      TypeReference<Map<String, Object>> typeReference = new TypeReference<Map<String, Object>>() { };
+      TypeReference<Map<String, Object>> typeReference = new TypeReference<Map<String, Object>>() {
+      };
       return mapper.readValue(in, typeReference);
     }
+  }
+
+  private <T> T parseJson(final Payload payload, final Class<T> klass) throws IOException {
+    try (InputStream in = payload.openInputStream()) {
+      return mapper.readValue(in, klass);
+    }
+  }
+
+  /**
+   * Parses the composer.json.
+   */
+  public ComposerPackagesJson parseComposerJson(final Payload payload) throws IOException {
+    return parseJson(payload, ComposerPackagesJson.class);
+  }
+
+  /**
+   * Builds the provider-includes urls from a packages file by replacing the hash placeholder with the sha256 value.
+   */
+  public List<String> buildProviderIncludesUrls(final ComposerPackagesJson packagesJson) {
+    return packagesJson.getProviderIncludes().entrySet().stream().map(
+        entry -> entry.getKey().replace("%hash%", entry.getValue().getSha256()))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Extracts the providers and hashes and from a provider-includes file.
+   */
+  public Map<String, ComposerDigestEntry> extractProvidersAndHashes(final Payload payload) throws IOException {
+    // TODO: Parse using JSON tokens rather than loading all this into memory
+    Map<String, ComposerDigestEntry> results = new LinkedHashMap<>();
+    ComposerProviderIncludesJson providerIncludesJson = parseJson(payload, ComposerProviderIncludesJson.class);
+    if (providerIncludesJson != null) {
+      for (Map.Entry<String, ComposerDigestEntry> provider : providerIncludesJson.getProviders().entrySet()) {
+        results.put(provider.getKey(), provider.getValue());
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Generates a modified packages.json containing the providers and their associated hashes, along with their original
+   * providers url.
+   * <p>
+   * This could be stored in a database under other circumstances, but we've encountered performance issues with such a
+   * large number of attributes in OrientDB maps. If we encounter performance issues reading such large JSON files into
+   * memory, then we will likely need to revisit this approach as well.
+   */
+  public Content buildPackagesWithHashesJson(final ComposerPackagesJson packagesJson,
+                                             final Map<String, ComposerDigestEntry> providers)
+      throws IOException {
+    ComposerPackagesJson result = new ComposerPackagesJson();
+    result.setProvidersUrl(packagesJson.getProvidersUrl());
+    result.setProviders(providers);
+    return new Content(new StringPayload(mapper.writeValueAsString(result), ContentTypes.APPLICATION_JSON));
   }
 }
